@@ -8,13 +8,12 @@ use Noxlogic\RateLimitBundle\Events\GenerateKeyEvent;
 use Noxlogic\RateLimitBundle\Events\RateLimitEvents;
 use Noxlogic\RateLimitBundle\Exception\RateLimitExceptionInterface;
 use Noxlogic\RateLimitBundle\Service\RateLimitService;
+use Noxlogic\RateLimitBundle\Service\RateLimitValidator;
 use Noxlogic\RateLimitBundle\Util\PathLimitProcessor;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
-use Symfony\Component\Routing\Route;
 
 class RateLimitAnnotationListener extends BaseListener
 {
@@ -35,7 +34,14 @@ class RateLimitAnnotationListener extends BaseListener
     protected $pathLimitProcessor;
 
     /**
-     * @param RateLimitService                    $rateLimitService
+     * @var RateLimitValidator
+     */
+    protected $rateLimitValidator;
+
+    /**
+     * @param EventDispatcherInterface $eventDispatcher
+     * @param RateLimitService $rateLimitService
+     * @param PathLimitProcessor $pathLimitProcessor
      */
     public function __construct(
         EventDispatcherInterface $eventDispatcher,
@@ -45,6 +51,7 @@ class RateLimitAnnotationListener extends BaseListener
         $this->eventDispatcher = $eventDispatcher;
         $this->rateLimitService = $rateLimitService;
         $this->pathLimitProcessor = $pathLimitProcessor;
+        $this->rateLimitValidator = new RateLimitValidator($rateLimitService, $pathLimitProcessor);
     }
 
     /**
@@ -64,7 +71,7 @@ class RateLimitAnnotationListener extends BaseListener
 
         // Find the best match
         $annotations = $event->getRequest()->attributes->get('_x-rate-limit', array());
-        $rateLimit = $this->findBestMethodMatch($event->getRequest(), $annotations);
+        $rateLimit = $this->rateLimitValidator->findBestMethodMatch($event->getRequest(), $annotations);
 
         // Another treatment before applying RateLimit ?
         $checkedRateLimitEvent = new CheckedRateLimitEvent($event->getRequest(), $rateLimit);
@@ -132,35 +139,6 @@ class RateLimitAnnotationListener extends BaseListener
             $event->stopPropagation();
         }
 
-    }
-
-
-    /**
-     * @param RateLimit[] $annotations
-     */
-    protected function findBestMethodMatch(Request $request, array $annotations)
-    {
-        // Empty array, check the path limits
-        if (count($annotations) == 0) {
-            return $this->pathLimitProcessor->getRateLimit($request);
-        }
-
-        $best_match = null;
-        foreach ($annotations as $annotation) {
-            // cast methods to array, even method holds a string
-            $methods = is_array($annotation->getMethods()) ? $annotation->getMethods() : array($annotation->getMethods());
-
-            if (in_array($request->getMethod(), $methods)) {
-                $best_match = $annotation;
-            }
-
-            // Only match "default" annotation when we don't have a best match
-            if (count($annotation->getMethods()) == 0 && $best_match == null) {
-                $best_match = $annotation;
-            }
-        }
-
-        return $best_match;
     }
 
     private function getKey(FilterControllerEvent $event, RateLimit $rateLimit, array $annotations)
