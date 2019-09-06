@@ -10,6 +10,7 @@
         <parameter key="noxlogic_rate_limit.rate_limit_service.class">Noxlogic\RateLimitBundle\Service\RateLimitService</parameter>
         <parameter key="noxlogic_rate_limit.oauth_key_generate_listener.class">Noxlogic\RateLimitBundle\EventListener\OauthKeyGenerateListener</parameter>
         <parameter key="noxlogic_rate_limit.path_limit_processor.class">Noxlogic\RateLimitBundle\Util\PathLimitProcessor</parameter>
+        <parameter key="noxlogic_rate_limit.annotation_limit_processor.class">Noxlogic\RateLimitBundle\Util\AnnotationLimitProcessor</parameter>
     </parameters>
 
     <services>
@@ -23,6 +24,12 @@
             </call>
         </service>
 
+        <service alias="noxlogic_rate_limit.processor" id="noxlogic_rate_limit.annotation_limit_processor" public="true"/>
+
+        <service id="noxlogic_rate_limit.annotation_limit_processor" class="%noxlogic_rate_limit.annotation_limit_processor.class%" public="false">
+            <argument id="noxlogic_rate_limit.path_limit_processor" type="service"/>
+        </service>
+
         <service id="noxlogic_rate_limit.path_limit_processor" class="%noxlogic_rate_limit.path_limit_processor.class%">
             <argument>%noxlogic_rate_limit.path_limits%</argument>
         </service>
@@ -30,7 +37,7 @@
         <service id="noxlogic_rate_limit.rate_limit_annotation_listener" class="%noxlogic_rate_limit.rate_limit_annotation_listener.class%">
             <argument type="service" id="event_dispatcher" />
             <argument type="service" id="noxlogic_rate_limit.rate_limit_service" />
-            <argument type="service" id="noxlogic_rate_limit.path_limit_processor" />
+            <argument type="service" id="noxlogic_rate_limit.processor" />
 
             <tag name="kernel.event_listener" event="kernel.controller" method="onKernelController" priority="-10" />
 

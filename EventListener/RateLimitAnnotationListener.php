@@ -9,8 +9,6 @@ use Noxlogic\RateLimitBundle\Events\RateLimitEvents;
 use Noxlogic\RateLimitBundle\Exception\RateLimitExceptionInterface;
 use Noxlogic\RateLimitBundle\LimitProcessorInterface;
 use Noxlogic\RateLimitBundle\Service\RateLimitService;
-use Noxlogic\RateLimitBundle\Util\AnnotationLimitProcessor;
-use Noxlogic\RateLimitBundle\Util\PathLimitProcessor;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -31,23 +29,23 @@ class RateLimitAnnotationListener extends BaseListener
     protected $rateLimitService;
 
     /**
-     * @var \Noxlogic\RateLimitBundle\Util\PathLimitProcessor
+     * @var LimitProcessorInterface
      */
-    protected $pathLimitProcessor;
+    protected $limitProcessor;
 
     /**
      * @param EventDispatcherInterface $eventDispatcher
      * @param RateLimitService $rateLimitService
-     * @param PathLimitProcessor $pathLimitProcessor
+     * @param LimitProcessorInterface $limitProcessor
      */
     public function __construct(
         EventDispatcherInterface $eventDispatcher,
         RateLimitService $rateLimitService,
-        PathLimitProcessor $pathLimitProcessor
+        LimitProcessorInterface $limitProcessor
     ) {
         $this->eventDispatcher = $eventDispatcher;
         $this->rateLimitService = $rateLimitService;
-        $this->pathLimitProcessor = $pathLimitProcessor;
+        $this->limitProcessor = $limitProcessor;
     }
 
     /**
@@ -65,15 +63,7 @@ class RateLimitAnnotationListener extends BaseListener
             return;
         }
 
-        // Find the best match
-        $annotations = $event->getRequest()->attributes->get('_x-rate-limit', array());
-
-        $limitProcessor = $this->pathLimitProcessor;
-        if ($annotations) {
-            $limitProcessor = new AnnotationLimitProcessor($annotations, $event->getController());
-        }
-
-        $rateLimit = $limitProcessor->getRateLimit($event->getRequest());
+        $rateLimit = $this->limitProcessor->getRateLimit($event->getRequest());
 
         // Another treatment before applying RateLimit ?
         $checkedRateLimitEvent = new CheckedRateLimitEvent($event->getRequest(), $rateLimit);
@@ -85,7 +75,7 @@ class RateLimitAnnotationListener extends BaseListener
             return;
         }
 
-        $key = $this->getKey($limitProcessor, $rateLimit, $event->getRequest());
+        $key = $this->getKey($rateLimit, $event);
 
         $rateLimitInfo = $this->rateLimitService->getRateLimitInfo($key, $rateLimit);
         if (!$rateLimitInfo) {
@@ -139,7 +129,7 @@ class RateLimitAnnotationListener extends BaseListener
 
         // Empty array, check the path limits
         if (count($annotations) == 0) {
-            return $this->pathLimitProcessor->getRateLimit($request);
+            return $this->limitProcessor->getRateLimit($request);
         }
 
         $best_match = null;
@@ -160,13 +150,14 @@ class RateLimitAnnotationListener extends BaseListener
         return $best_match;
     }
 
-    private function getKey(LimitProcessorInterface $limitProcessor, RateLimit $rateLimit, Request $request)
+    private function getKey(RateLimit $rateLimit, FilterControllerEvent $event)
     {
         // Let listeners manipulate the key
+        $request = $event->getRequest();
         $keyEvent = new GenerateKeyEvent($request, '', $rateLimit->getPayload());
 
         $keyEvent->addToKey(join('.', $rateLimit->getMethods()));
-        $keyEvent->addToKey($limitProcessor->getRateLimitAlias($request));
+        $keyEvent->addToKey($this->limitProcessor->getRateLimitAlias($request, $event->getController()));
 
         $this->eventDispatcher->dispatch(RateLimitEvents::GENERATE_KEY, $keyEvent);
 

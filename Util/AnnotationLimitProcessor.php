@@ -9,25 +9,25 @@ use Symfony\Component\HttpFoundation\Request;
 class AnnotationLimitProcessor implements LimitProcessorInterface
 {
     /**
-     * @var array
+     * @var LimitProcessorInterface
      */
-    private $annotations;
+    private $fallback;
 
-    /**
-     * @var callable
-     */
-    private $controller;
-
-    public function __construct(array $annotations, callable $controller)
+    public function __construct(LimitProcessorInterface $fallback)
     {
-        $this->annotations = $annotations;
-        $this->controller = $controller;
+        $this->fallback = $fallback;
     }
 
     public function getRateLimit(Request $request)
     {
+        $annotations = $request->attributes->get('_x-rate-limit', array());
+
+        if (!$annotations) {
+            return $this->fallback->getRateLimit($request);
+        }
+
         $best_match = null;
-        foreach ($this->annotations as $annotation) {
+        foreach ($annotations as $annotation) {
             // cast methods to array, even method holds a string
             $methods = is_array($annotation->getMethods()) ? $annotation->getMethods() : array($annotation->getMethods());
 
@@ -44,13 +44,17 @@ class AnnotationLimitProcessor implements LimitProcessorInterface
         return $best_match;
     }
 
-    public function getRateLimitAlias(Request $request)
+    public function getRateLimitAlias(Request $request, callable $controller)
     {
+        $annotations = $request->attributes->get('_x-rate-limit', array());
+
+        if (!$annotations) {
+            return $this->fallback->getRateLimitAlias($request, $controller);
+        }
+
         if (($route = $request->attributes->get('_route'))) {
             return $route;
         }
-
-        $controller = $this->controller;
 
         if (is_string($controller) && false !== strpos($controller, '::')) {
             $controller = explode('::', $controller);

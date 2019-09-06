@@ -56,7 +56,7 @@ class PathLimitProcessor implements LimitProcessorInterface
         return $this->getMatchedLimitPath($request);
     }
 
-    public function getRateLimitAlias(Request $request)
+    public function getRateLimitAlias(Request $request, callable $controller)
     {
         return str_replace('/', '.', $this->getMatchedLimitPath($request));
     }

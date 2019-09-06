@@ -15,7 +15,8 @@ interface LimitProcessorInterface
 
     /**
      * @param Request $request
+     * @param callable $controller
      * @return string
      */
-    public function getRateLimitAlias(Request $request);
+    public function getRateLimitAlias(Request $request, callable $controller);
 }
